@@ -1,0 +1,49 @@
+---
+- name: kubeadm init
+  ansible.builtin.command: >
+    kubeadm init
+    --pod-network-cidr={{ pod_network_cidr }}
+    --control-plane-endpoint={{ ansible_host }}
+  args:
+    creates: /etc/kubernetes/admin.conf
+
+- name: Create .kube directory for ubuntu user
+  ansible.builtin.file:
+    path: /home/ubuntu/.kube
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: "0755"
+
+- name: Copy admin.conf to ubuntu user's kubeconfig
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/ubuntu/.kube/config
+    remote_src: true
+    owner: ubuntu
+    group: ubuntu
+    mode: "0600"
+
+- name: Fetch kubeconfig to the control machine
+  ansible.builtin.fetch:
+    src: /etc/kubernetes/admin.conf
+    dest: "{{ playbook_dir }}/kubeconfig"
+    flat: true
+
+- name: Install Calico CNI
+  ansible.builtin.command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    apply -f {{ calico_manifest_url }}
+  changed_when: true
+
+- name: Generate kubeadm join command
+  ansible.builtin.command: kubeadm token create --print-join-command
+  register: kubeadm_join_cmd
+  changed_when: false
+
+- name: Save join command for worker nodes
+  ansible.builtin.copy:
+    content: "{{ kubeadm_join_cmd.stdout }}"
+    dest: "{{ playbook_dir }}/join-command.sh"
+  delegate_to: localhost
+  become: false

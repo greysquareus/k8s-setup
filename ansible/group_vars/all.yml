@@ -1,0 +1,9 @@
+kubernetes_series: "v1.31"
+pod_network_cidr: "192.168.0.0/16"
+
+calico_manifest_url: "https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml"
+metrics_server_manifest_url: "https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml"
+gateway_api_manifest_url: "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml"
+
+helm_version: "v3.16.2"
+envoy_gateway_chart_version: "v1.1.2"

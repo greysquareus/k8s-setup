@@ -1,0 +1,51 @@
+---
+- name: Wait for all nodes to be Ready
+  ansible.builtin.command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    wait --for=condition=Ready node --all --timeout=180s
+  changed_when: false
+
+- name: Install metrics-server
+  ansible.builtin.command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    apply -f {{ metrics_server_manifest_url }}
+  changed_when: true
+
+- name: Patch metrics-server to tolerate self-signed kubelet certs (lab-only)
+  ansible.builtin.command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    patch deployment metrics-server -n kube-system --type=json
+    -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+  register: metrics_patch
+  changed_when: "'no change' not in metrics_patch.stdout"
+  failed_when: metrics_patch.rc != 0 and 'not found' not in metrics_patch.stderr
+
+- name: Install Gateway API CRDs
+  ansible.builtin.command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    apply -f {{ gateway_api_manifest_url }}
+  changed_when: true
+
+- name: Check if Helm is already installed
+  ansible.builtin.command: helm version
+  register: helm_check
+  failed_when: false
+  changed_when: false
+
+- name: Install Helm
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash -s -- --version {{ helm_version }}
+  args:
+    executable: /bin/bash
+  when: helm_check.rc != 0
+
+- name: Install Envoy Gateway via Helm
+  ansible.builtin.command: >
+    helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm
+    --version {{ envoy_gateway_chart_version }}
+    -n envoy-gateway-system --create-namespace
+    --kubeconfig /etc/kubernetes/admin.conf
+    --wait --timeout 5m
+  register: eg_install
+  changed_when: "'STATUS: deployed' in eg_install.stdout"

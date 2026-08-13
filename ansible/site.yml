@@ -1,0 +1,24 @@
+---
+- name: Prepare all nodes
+  hosts: k8s_cluster
+  become: true
+  roles:
+    - common
+
+- name: Bootstrap control plane
+  hosts: control_plane
+  become: true
+  roles:
+    - master
+
+- name: Join workers to the cluster
+  hosts: workers
+  become: true
+  roles:
+    - worker
+
+- name: Install cluster addons
+  hosts: control_plane
+  become: true
+  roles:
+    - addons

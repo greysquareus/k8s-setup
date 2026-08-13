@@ -1,3 +1,7 @@
 *.tfstate
 tfsta*
 .env
+keys/
+.terraform/
+ansible/inventory.ini
+*.tfstate.backup
