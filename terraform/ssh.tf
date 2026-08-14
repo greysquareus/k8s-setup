@@ -13,6 +13,6 @@ resource "aws_key_pair" "node" {
 resource "local_sensitive_file" "private_key" {
   for_each        = local.nodes
   content         = tls_private_key.node[each.key].private_key_pem
-  filename        = "${path.module}/keys/${each.key}.pem"
+  filename        = "${abspath("${path.module}/..")}/keys/${each.key}.pem"
   file_permission = "0600"
 }

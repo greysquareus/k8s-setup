@@ -1,10 +1,10 @@
 .PHONY: plan apply wait-ssh configure up destroy
 
 plan:
-	terraform plan
+	terraform -chdir=terraform plan
 
 apply:
-	terraform apply
+	terraform -chdir=terraform apply
 
 # Blocks until every host in the generated inventory accepts SSH.
 # EC2 public_ip is known well before cloud-init/sshd are actually up,
@@ -18,4 +18,5 @@ configure: wait-ssh
 up: apply configure
 
 destroy:
-	terraform destroy
+	terraform -chdir=terraform destroy
+	rm -f ansible/kubeconfig ansible/join-command.sh
