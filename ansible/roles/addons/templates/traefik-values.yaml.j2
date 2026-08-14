@@ -1,0 +1,28 @@
+providers:
+  kubernetesGateway:
+    enabled: true
+  kubernetesIngress:
+    enabled: true
+
+gateway:
+  enabled: true
+  listeners:
+    web:
+      port: 8000
+      protocol: HTTP
+      namespacePolicy: All
+
+gatewayClass:
+  enabled: true
+
+service:
+  type: ClusterIP
+
+ports:
+  web:
+    hostPort: 80
+  websecure:
+    hostPort: 443
+
+nodeSelector:
+  kubernetes.io/hostname: {{ traefik_node_hostname }}

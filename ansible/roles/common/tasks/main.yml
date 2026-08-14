@@ -1,4 +1,15 @@
 ---
+- name: Set hostname to match inventory name (master/worker1/worker2)
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Ensure hostname resolves locally
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1'
+    line: "127.0.1.1 {{ inventory_hostname }}"
+    state: present
+
 - name: Disable swap
   ansible.builtin.command: swapoff -a
   changed_when: false

@@ -40,12 +40,55 @@
     executable: /bin/bash
   when: helm_check.rc != 0
 
-- name: Install Envoy Gateway via Helm
+# - name: Install Envoy Gateway via Helm
+#   ansible.builtin.command: >
+#     helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm
+#     --version {{ envoy_gateway_chart_version }}
+#     -n envoy-gateway-system --create-namespace
+#     --kubeconfig /etc/kubernetes/admin.conf
+#     --wait --timeout 5m
+#   register: eg_install
+#   changed_when: "'STATUS: deployed' in eg_install.stdout"
+
+
+- name: Add Helm repos
+  ansible.builtin.command: helm repo add {{ item.name }} {{ item.url }}
+  loop:
+    - { name: traefik,  url: "https://traefik.github.io/charts" }
+    - { name: jetstack, url: "https://charts.jetstack.io" }
+  register: repo_add
+  changed_when: "'already exists' not in repo_add.stderr | default('')"
+  failed_when: repo_add.rc != 0 and 'already exists' not in repo_add.stderr
+
+- name: Update Helm repos
+  ansible.builtin.command: helm repo update
+  changed_when: false
+
+- name: Render traefik values
+  ansible.builtin.template:
+    src: traefik-values.yaml.j2
+    dest: /root/traefik-values.yaml
+    mode: "0644"
+
+- name: Install traefik
   ansible.builtin.command: >
-    helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm
-    --version {{ envoy_gateway_chart_version }}
-    -n envoy-gateway-system --create-namespace
-    --kubeconfig /etc/kubernetes/admin.conf
+    helm upgrade --install traefik traefik/traefik
+    --version {{ traefik_chart_version }}
+    -n traefik --create-namespace
+    -f /root/traefik-values.yaml
+    --kubeconfig {{ kubeconfig }}
     --wait --timeout 5m
-  register: eg_install
-  changed_when: "'STATUS: deployed' in eg_install.stdout"
+  register: traefik_install
+  changed_when: "'STATUS: deployed' in traefik_install.stdout"
+
+- name: Install cert-manager
+  ansible.builtin.command: >
+    helm upgrade --install cert-manager jetstack/cert-manager
+    --version {{ cert_manager_chart_version }}
+    -n cert-manager --create-namespace
+    --set crds.enabled=true
+    --set startupapicheck.enabled=false
+    --kubeconfig {{ kubeconfig }}
+    --wait --timeout 5m
+  register: cm_install
+  changed_when: "'STATUS: deployed' in cm_install.stdout"
