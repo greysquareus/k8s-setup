@@ -1,0 +1,32 @@
+---
+# Эталонное решение. Ресурсы пересоздаются, потому что часть полей
+# (например command у Pod) неизменяемы.
+- name: Прочитать solution
+  ansible.builtin.set_fact:
+    lab_solution: >-
+      {{ lookup('template', lab_tasks_dir ~ '/' ~ lab_task ~ '/solution.yaml.j2')
+         | from_yaml_all | list }}
+
+- name: Удалить старые объекты
+  kubernetes.core.k8s:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: absent
+    namespace: "{{ lab_namespace }}"
+    api_version: "{{ item.apiVersion }}"
+    kind: "{{ item.kind }}"
+    name: "{{ item.metadata.name }}"
+    wait: true
+    wait_timeout: 120
+  loop: "{{ lab_solution }}"
+  loop_control:
+    label: "{{ item.kind }}/{{ item.metadata.name }}"
+
+- name: Применить решение
+  kubernetes.core.k8s:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: present
+    namespace: "{{ lab_namespace }}"
+    definition: "{{ lab_solution }}"
+
+- name: Перепроверить
+  ansible.builtin.include_tasks: validate.yml

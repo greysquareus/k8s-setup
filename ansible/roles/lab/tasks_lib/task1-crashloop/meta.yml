@@ -1,0 +1,13 @@
+---
+title: "Pod в CrashLoopBackOff"
+domain: Troubleshooting
+difficulty: easy
+time: "5m"
+hints:
+  - "kubectl -n {{ lab_namespace }} describe pod nginx-broken — смотри секцию Events и Last State"
+  - "kubectl -n {{ lab_namespace }} logs nginx-broken --previous"
+  - "Поле command в спеке контейнера переопределяет ENTRYPOINT образа"
+debrief: >-
+  command/args в манифесте переопределяют ENTRYPOINT/CMD образа.
+  Если бинаря нет в образе — kubelet не сможет стартовать контейнер
+  и Pod уйдёт в CrashLoopBackOff с exit code 128.

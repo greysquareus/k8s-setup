@@ -1,0 +1,43 @@
+---
+- name: Выбрать worker-ноду под GPU
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    kind: Node
+  register: t3_nodes
+
+- name: Запомнить имя ноды
+  ansible.builtin.set_fact:
+    t3_node: >-
+      {{ (t3_nodes.resources
+          | rejectattr('metadata.labels.node-role.kubernetes.io/control-plane', 'defined')
+          | map(attribute='metadata.name') | sort | first) }}
+
+- name: Нет ни одной worker-ноды
+  ansible.builtin.fail:
+    msg: "В кластере нет worker-нод — задача требует минимум одного воркера"
+  when: t3_node | length == 0
+
+- name: Повесить label hw=gpu
+  kubernetes.core.k8s:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: patched
+    kind: Node
+    name: "{{ t3_node }}"
+    definition:
+      metadata:
+        labels:
+          hw: gpu
+
+- name: Повесить taint dedicated=gpu:NoSchedule
+  kubernetes.core.k8s_taint:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: present
+    name: "{{ t3_node }}"
+    taints:
+      - key: dedicated
+        value: gpu
+        effect: NoSchedule
+
+- name: GPU-нода подготовлена
+  ansible.builtin.debug:
+    msg: "GPU-нода: {{ t3_node }}"

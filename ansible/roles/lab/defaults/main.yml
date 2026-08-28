@@ -1,0 +1,34 @@
+---
+# Namespace, в котором живут все задачи. Меняется одной переменной.
+lab_namespace: cka
+
+# Kubeconfig, который master-роль уже положила рядом с плейбуком.
+lab_kubeconfig: "{{ playbook_dir }}/kubeconfig"
+
+# deploy | validate | solve | clean | list
+lab_action: deploy
+lab_task: ""
+
+# Где лежат сами задачи.
+lab_tasks_dir: "{{ role_path }}/tasks_lib"
+
+# Типы ресурсов, которые вычищаются в namespace перед развёртыванием задачи.
+lab_wipe_kinds:
+  - Deployment
+  - StatefulSet
+  - DaemonSet
+  - ReplicaSet
+  - Job
+  - CronJob
+  - Pod
+  - Service
+  - ConfigMap
+  - Secret
+  - Ingress
+  - NetworkPolicy
+  - PersistentVolumeClaim
+  - ResourceQuota
+  - LimitRange
+  - Role
+  - RoleBinding
+  - ServiceAccount

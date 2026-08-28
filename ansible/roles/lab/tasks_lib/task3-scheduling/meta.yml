@@ -1,0 +1,13 @@
+---
+title: "Поды Pending: taint + nodeSelector"
+domain: Workloads & Scheduling
+difficulty: medium
+time: "12m"
+hints:
+  - "kubectl -n {{ lab_namespace }} describe pod -l app=gpu-app — смотри Events, там причина от scheduler"
+  - "kubectl describe node <worker> | grep -i -A2 taints"
+  - "nodeSelector выбирает ноду, но taint всё равно отталкивает под — нужен tolerations"
+debrief: >-
+  nodeSelector/affinity сужают выбор нод, а taint на ноде отклоняет поды,
+  у которых нет соответствующего toleration. Это независимые механизмы,
+  и для выделенной ноды обычно нужны оба.

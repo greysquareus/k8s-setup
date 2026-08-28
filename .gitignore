@@ -5,3 +5,5 @@ keys/
 .terraform/
 ansible/inventory.ini
 *.tfstate.backup
+.venv*
+.venv

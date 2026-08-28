@@ -1,0 +1,63 @@
+---
+- name: Найти GPU-ноду
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    kind: Node
+    label_selectors:
+      - hw=gpu
+  register: v_nodes
+
+- name: GPU-нода на месте
+  ansible.builtin.assert:
+    that:
+      - v_nodes.resources | length == 1
+    fail_msg: "Нода с меткой hw=gpu не найдена — перезалей задачу через action=deploy"
+    quiet: true
+
+- name: Дождаться Deployment gpu-app
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ lab_namespace }}"
+    name: gpu-app
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 150
+  register: v_deploy
+
+- name: Обе реплики готовы
+  ansible.builtin.assert:
+    that:
+      - v_deploy.resources[0].status.readyReplicas | default(0) | int == 2
+    fail_msg: "gpu-app не имеет 2 готовых реплик"
+    quiet: true
+
+- name: Получить поды
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Pod
+    namespace: "{{ lab_namespace }}"
+    label_selectors:
+      - app=gpu-app
+    field_selectors:
+      - status.phase=Running
+  register: v_pods
+
+- name: Все поды на GPU-ноде
+  ansible.builtin.assert:
+    that:
+      - v_pods.resources | length == 2
+      - v_pods.resources | map(attribute='spec.nodeName') | unique | list == [v_nodes.resources[0].metadata.name]
+    fail_msg: "Поды запланированы не на ноду {{ v_nodes.resources[0].metadata.name }}"
+    quiet: true
+
+- name: Taint на ноде не снят
+  ansible.builtin.assert:
+    that:
+      - "'dedicated' in (v_nodes.resources[0].spec.taints | default([]) | map(attribute='key') | list)"
+    fail_msg: "Taint dedicated=gpu:NoSchedule убран с ноды — задача решена обходным путём"
+    quiet: true

@@ -1,0 +1,13 @@
+[{{ lab_task }}] Поды висят в Pending
+
+Одна из worker-нод помечена как выделенная под GPU:
+  label: hw=gpu
+  taint: dedicated=gpu:NoSchedule
+
+В namespace {{ lab_namespace }} развёрнут Deployment gpu-app (2 реплики).
+Поды не стартуют.
+
+Требуется: обе реплики gpu-app в Running и запланированы именно на GPU-ноду.
+Убирать taint/label с ноды нельзя — правь Deployment.
+
+Проверка: ansible-playbook lab.yml -e task={{ lab_task }} -e action=validate

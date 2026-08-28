@@ -1,0 +1,61 @@
+---
+- name: Найти каталоги задач
+  ansible.builtin.find:
+    paths: "{{ lab_tasks_dir }}"
+    file_type: directory
+    recurse: false
+  register: lab_found
+
+- name: Сформировать список доступных задач
+  ansible.builtin.set_fact:
+    lab_available: "{{ lab_found.files | map(attribute='path') | map('basename') | sort }}"
+
+- name: Показать доступные задачи
+  when: lab_action == 'list'
+  block:
+    - name: Список задач
+      ansible.builtin.debug:
+        msg: "{{ lab_available }}"
+
+    - name: Выход
+      ansible.builtin.meta: end_play
+
+- name: Проверить аргументы запуска
+  ansible.builtin.assert:
+    that:
+      - lab_action in ['deploy', 'validate', 'solve', 'clean', 'hints']
+      - lab_task in lab_available
+    fail_msg: >-
+      Задай корректные task и action.
+      Доступные task: {{ lab_available | join(', ') }}.
+      Доступные action: deploy, validate, hints, solve, clean, list.
+    quiet: true
+
+- name: Проверить, что kubeconfig на месте
+  ansible.builtin.stat:
+    path: "{{ lab_kubeconfig }}"
+  register: lab_kubeconfig_stat
+
+- name: Kubeconfig не найден
+  ansible.builtin.fail:
+    msg: "Нет kubeconfig по пути {{ lab_kubeconfig }}. Сначала прогони site.yml или задай -e lab_kubeconfig=/путь"
+  when: not lab_kubeconfig_stat.stat.exists
+
+- name: Загрузить описание задачи
+  ansible.builtin.include_vars:
+    file: "{{ lab_tasks_dir }}/{{ lab_task }}/meta.yml"
+    name: mission
+
+- name: Проверить связь с кластером
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    kind: Node
+  register: lab_nodes
+
+- name: Кластер недоступен или пуст
+  ansible.builtin.fail:
+    msg: "Кластер не отвечает или в нём нет нод"
+  when: lab_nodes.resources | length == 0
+
+- name: Выполнить действие "{{ lab_action }}"
+  ansible.builtin.include_tasks: "{{ lab_action }}.yml"

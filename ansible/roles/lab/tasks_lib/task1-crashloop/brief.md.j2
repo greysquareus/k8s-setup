@@ -1,0 +1,8 @@
+[{{ lab_task }}] Pod в CrashLoopBackOff
+
+В namespace {{ lab_namespace }} развёрнут pod nginx-broken. Он не поднимается.
+
+Требуется: pod nginx-broken в состоянии Running и Ready 1/1.
+Имя pod'а и namespace менять нельзя.
+
+Проверка: ansible-playbook lab.yml -e task={{ lab_task }} -e action=validate

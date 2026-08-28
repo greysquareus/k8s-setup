@@ -1,0 +1,4 @@
+---
+- name: Подсказки
+  ansible.builtin.debug:
+    msg: "{{ mission.hints | default(['Подсказок нет']) }}"

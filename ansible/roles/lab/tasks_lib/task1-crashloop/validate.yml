@@ -1,0 +1,36 @@
+---
+- name: Получить pod nginx-broken
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Pod
+    namespace: "{{ lab_namespace }}"
+    name: nginx-broken
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: 90
+  register: v_pod
+
+- name: Pod существует и Running
+  ansible.builtin.assert:
+    that:
+      - v_pod.resources | length == 1
+      - v_pod.resources[0].status.phase == 'Running'
+    fail_msg: "Pod nginx-broken не найден или не в статусе Running"
+    quiet: true
+
+- name: Контейнер готов
+  ansible.builtin.assert:
+    that:
+      - v_pod.resources[0].status.containerStatuses[0].ready | bool
+    fail_msg: "Контейнер не в Ready"
+    quiet: true
+
+- name: Сломанная команда убрана
+  ansible.builtin.assert:
+    that:
+      - "'nginxzz' not in (v_pod.resources[0].spec.containers[0].command | default([]))"
+    fail_msg: "В спеке всё ещё команда nginxzz"
+    quiet: true

@@ -1,0 +1,19 @@
+---
+- name: Проверка решения
+  block:
+    - name: Прогнать чек-лист задачи
+      ansible.builtin.include_tasks: "{{ lab_tasks_dir }}/{{ lab_task }}/validate.yml"
+
+    - name: Результат
+      ansible.builtin.debug:
+        msg:
+          - "PASSED: {{ mission.title }}"
+          - "{{ mission.debrief | default('') }}"
+  rescue:
+    - name: Результат
+      ansible.builtin.debug:
+        msg: "{{ ['FAILED: ' ~ mission.title, ''] + ['Подсказки:'] + mission.hints | default([]) }}"
+
+    - name: Задача не решена
+      ansible.builtin.fail:
+        msg: "Проверка не пройдена. Запусти ещё раз после исправления."

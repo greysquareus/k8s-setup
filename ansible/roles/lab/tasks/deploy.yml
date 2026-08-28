@@ -1,0 +1,59 @@
+---
+# Namespace пересоздаётся целиком: так не нужно перечислять kind'ы,
+# нет конфликтов с CRD (Calico регистрирует свой NetworkPolicy)
+# и не воюем со служебными kube-root-ca.crt / default SA.
+- name: Снести namespace {{ lab_namespace }} с прошлой задачей
+  kubernetes.core.k8s:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: absent
+    api_version: v1
+    kind: Namespace
+    name: "{{ lab_namespace }}"
+    wait: true
+    wait_timeout: 180
+
+- name: Создать namespace {{ lab_namespace }}
+  kubernetes.core.k8s:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ lab_namespace }}"
+        labels:
+          app.kubernetes.io/managed-by: cka-lab
+
+# Без default SA поды не создаются: "error looking up service account".
+- name: Дождаться default ServiceAccount
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: ServiceAccount
+    namespace: "{{ lab_namespace }}"
+    name: default
+  register: lab_default_sa
+  until: lab_default_sa.resources | length == 1
+  retries: 20
+  delay: 2
+
+- name: Откатить изменения на нодах от предыдущей задачи
+  ansible.builtin.include_tasks: "{{ lab_tasks_dir }}/{{ lab_task }}/cleanup.yml"
+  when: (lab_tasks_dir ~ '/' ~ lab_task ~ '/cleanup.yml') is exists
+
+- name: Подготовить окружение задачи (setup)
+  ansible.builtin.include_tasks: "{{ lab_tasks_dir }}/{{ lab_task }}/setup.yml"
+  when: (lab_tasks_dir ~ '/' ~ lab_task ~ '/setup.yml') is exists
+
+- name: Развернуть сломанные ресурсы
+  kubernetes.core.k8s:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: present
+    namespace: "{{ lab_namespace }}"
+    definition: >-
+      {{ lookup('template', lab_tasks_dir ~ '/' ~ lab_task ~ '/broken.yaml.j2')
+         | from_yaml_all | list }}
+
+- name: Условие задачи
+  ansible.builtin.debug:
+    msg: "{{ lookup('template', lab_tasks_dir ~ '/' ~ lab_task ~ '/brief.md.j2').splitlines() }}"

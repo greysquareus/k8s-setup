@@ -1,0 +1,14 @@
+---
+- name: Откатить изменения на нодах
+  ansible.builtin.include_tasks: "{{ lab_tasks_dir }}/{{ lab_task }}/cleanup.yml"
+  when: (lab_tasks_dir ~ '/' ~ lab_task ~ '/cleanup.yml') is exists
+
+- name: Удалить namespace {{ lab_namespace }}
+  kubernetes.core.k8s:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: absent
+    api_version: v1
+    kind: Namespace
+    name: "{{ lab_namespace }}"
+    wait: true
+    wait_timeout: 180

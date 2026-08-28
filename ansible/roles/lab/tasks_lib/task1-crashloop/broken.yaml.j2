@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-broken
+  namespace: {{ lab_namespace }}
+  labels:
+    app: nginx-broken
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.27-alpine
+      command: ["nginxzz"]
+      ports:
+        - containerPort: 80

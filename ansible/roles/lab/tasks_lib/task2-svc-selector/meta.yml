@@ -1,0 +1,13 @@
+---
+title: "Service без Endpoints"
+domain: Services & Networking
+difficulty: easy
+time: "8m"
+hints:
+  - "kubectl -n {{ lab_namespace }} get endpoints web-svc — если <none>, селектор не совпадает с метками подов"
+  - "kubectl -n {{ lab_namespace }} get pods --show-labels"
+  - "targetPort — это порт в контейнере, а не порт сервиса"
+debrief: >-
+  Service находит поды по spec.selector, сравнивая его с метками подов
+  (pod template labels в Deployment, не metadata.labels самого Deployment).
+  targetPort должен совпадать с реальным портом контейнера.

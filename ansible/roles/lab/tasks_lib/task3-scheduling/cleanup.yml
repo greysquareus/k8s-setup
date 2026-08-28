@@ -1,0 +1,28 @@
+---
+- name: Найти ноды с меткой hw=gpu
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    kind: Node
+    label_selectors:
+      - hw=gpu
+  register: t3_clean_nodes
+
+- name: Снять taint
+  kubernetes.core.k8s_taint:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: absent
+    name: "{{ item }}"
+    taints:
+      - key: dedicated
+        effect: NoSchedule
+  loop: "{{ t3_clean_nodes.resources | map(attribute='metadata.name') | list }}"
+
+- name: Снять label
+  kubernetes.core.k8s_json_patch:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    kind: Node
+    name: "{{ item }}"
+    patch:
+      - op: remove
+        path: /metadata/labels/hw
+  loop: "{{ t3_clean_nodes.resources | map(attribute='metadata.name') | list }}"

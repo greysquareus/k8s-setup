@@ -1,0 +1,11 @@
+[{{ lab_task }}] Service без Endpoints
+
+В namespace {{ lab_namespace }} есть Deployment web (2 реплики nginx) и Service web-svc.
+Обращение к web-svc:80 не работает.
+
+Требуется:
+  - у Service web-svc появились Endpoints на обе реплики
+  - трафик на порт 80 сервиса доходит до порта 80 контейнера
+Deployment и его метки менять нельзя, чини Service.
+
+Проверка: ansible-playbook lab.yml -e task={{ lab_task }} -e action=validate

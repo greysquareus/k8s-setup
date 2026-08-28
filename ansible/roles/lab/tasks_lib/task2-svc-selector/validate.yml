@@ -1,0 +1,65 @@
+---
+- name: Дождаться готовности Deployment web
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ lab_namespace }}"
+    name: web
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 120
+  register: v_deploy
+
+- name: Обе реплики подняты
+  ansible.builtin.assert:
+    that:
+      - v_deploy.resources[0].status.readyReplicas | default(0) | int == 2
+    fail_msg: "Deployment web не имеет 2 готовых реплик"
+    quiet: true
+
+- name: Получить Endpoints сервиса
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Endpoints
+    namespace: "{{ lab_namespace }}"
+    name: web-svc
+  register: v_ep
+  until:
+    - v_ep.resources | length == 1
+    - v_ep.resources[0].subsets | default([]) | length > 0
+  retries: 12
+  delay: 5
+
+- name: Endpoints указывают на обе реплики
+  ansible.builtin.assert:
+    that:
+      - v_ep.resources[0].subsets[0].addresses | length == 2
+    fail_msg: "У web-svc нет двух Endpoints — проверь selector"
+    quiet: true
+
+- name: Трафик идёт на порт 80 контейнера
+  ansible.builtin.assert:
+    that:
+      - 80 in (v_ep.resources[0].subsets[0].ports | map(attribute='port') | list)
+    fail_msg: "Endpoints ведут не на порт 80 — проверь targetPort"
+    quiet: true
+
+- name: Порт самого сервиса остался 80
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Service
+    namespace: "{{ lab_namespace }}"
+    name: web-svc
+  register: v_svc
+
+- name: Service слушает 80
+  ansible.builtin.assert:
+    that:
+      - 80 in (v_svc.resources[0].spec.ports | map(attribute='port') | list)
+    fail_msg: "Service web-svc больше не публикует порт 80"
+    quiet: true
