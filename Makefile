@@ -4,7 +4,7 @@ plan:
 	terraform -chdir=terraform plan
 
 apply:
-	terraform -chdir=terraform apply
+	terraform -chdir=terraform apply --auto-approve=true
 
 # Blocks until every host in the generated inventory accepts SSH.
 # EC2 public_ip is known well before cloud-init/sshd are actually up,
@@ -18,5 +18,5 @@ configure: wait-ssh
 up: apply configure
 
 destroy:
-	terraform -chdir=terraform destroy
+	terraform -chdir=terraform destroy --auto-approve=true
 	rm -f ansible/kubeconfig ansible/join-command.sh

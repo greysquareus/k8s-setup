@@ -3,7 +3,7 @@ pod_network_cidr: "192.168.0.0/16"
 
 calico_manifest_url: "https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml"
 metrics_server_manifest_url: "https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml"
-gateway_api_manifest_url: "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml"
+gateway_api_manifest_url: "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.1/standard-install.yaml"
 traefik_chart_version: "33.2.1"
 cert_manager_chart_version: "v1.16.3"
 traefik_node_hostname: "worker1"
@@ -11,4 +11,4 @@ traefik_node_hostname: "worker1"
 kubeconfig: /etc/kubernetes/admin.conf
 
 helm_version: "v3.16.2"
-envoy_gateway_chart_version: "v1.1.2"
+envoy_gateway_chart_version: "v1.9.1"

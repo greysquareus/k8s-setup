@@ -40,21 +40,54 @@
     executable: /bin/bash
   when: helm_check.rc != 0
 
-# - name: Install Envoy Gateway via Helm
-#   ansible.builtin.command: >
-#     helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm
-#     --version {{ envoy_gateway_chart_version }}
-#     -n envoy-gateway-system --create-namespace
-#     --kubeconfig /etc/kubernetes/admin.conf
-#     --wait --timeout 5m
-#   register: eg_install
-#   changed_when: "'STATUS: deployed' in eg_install.stdout"
+- name: Install Envoy Gateway CRDs
+  # The chart's bundled crds/gatewayapi-crds.yaml vendors an experimental
+  # xbackends.gateway.networking.x-k8s.io CRD whose CEL rule (format.dns1123Label)
+  # this apiserver can't compile, which aborts Helm's whole CRD-install step
+  # before it reaches the generated/ dir with EnvoyProxy et al. Install
+  # Envoy Gateway's own CRDs directly and skip the chart's bundled ones instead.
+  # --server-side: EnvoyProxy/SecurityPolicy schemas are big enough that the
+  # last-applied-configuration annotation a regular `apply` writes exceeds the
+  # 256KiB annotation limit. Server-side apply tracks field ownership instead
+  # of that annotation, so it doesn't hit the cap.
+  ansible.builtin.command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    apply --server-side --force-conflicts
+    -f https://github.com/envoyproxy/gateway/releases/download/{{ envoy_gateway_chart_version }}/envoy-gateway-crds.yaml
+  changed_when: true
 
+- name: Install Envoy Gateway via Helm
+  ansible.builtin.command: >
+    helm upgrade --install envoy-gateway oci://docker.io/envoyproxy/gateway-helm
+    --version {{ envoy_gateway_chart_version }}
+    --skip-crds
+    -n envoy-gateway-system --create-namespace
+    --kubeconfig /etc/kubernetes/admin.conf
+    --wait --timeout 5m
+  register: envoy_gateway_install
+  changed_when: "'STATUS: deployed' in envoy_gateway_install.stdout"
+
+- name: Render Envoy GatewayClass manifest
+  ansible.builtin.template:
+    src: envoy-gatewayclass.yaml.j2
+    dest: /root/envoy-gatewayclass.yaml
+    mode: "0644"
+
+- name: Apply Envoy EnvoyProxy + GatewayClass
+  ansible.builtin.command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    apply -f /root/envoy-gatewayclass.yaml
+  changed_when: true
+
+- name: Wait for Envoy GatewayClass to be Accepted
+  ansible.builtin.command: >
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf
+    wait --for=condition=Accepted gatewayclass/envoy --timeout=120s
+  changed_when: false
 
 - name: Add Helm repos
   ansible.builtin.command: helm repo add {{ item.name }} {{ item.url }}
   loop:
-    - { name: traefik,  url: "https://traefik.github.io/charts" }
     - { name: jetstack, url: "https://charts.jetstack.io" }
   register: repo_add
   changed_when: "'already exists' not in repo_add.stderr | default('')"
@@ -63,23 +96,6 @@
 - name: Update Helm repos
   ansible.builtin.command: helm repo update
   changed_when: false
-
-- name: Render traefik values
-  ansible.builtin.template:
-    src: traefik-values.yaml.j2
-    dest: /root/traefik-values.yaml
-    mode: "0644"
-
-- name: Install traefik
-  ansible.builtin.command: >
-    helm upgrade --install traefik traefik/traefik
-    --version {{ traefik_chart_version }}
-    -n traefik --create-namespace
-    -f /root/traefik-values.yaml
-    --kubeconfig {{ kubeconfig }}
-    --wait --timeout 5m
-  register: traefik_install
-  changed_when: "'STATUS: deployed' in traefik_install.stdout"
 
 - name: Install cert-manager
   ansible.builtin.command: >
@@ -92,3 +108,21 @@
     --wait --timeout 5m
   register: cm_install
   changed_when: "'STATUS: deployed' in cm_install.stdout"
+
+- name: Source kubectl completion in ubuntu user's bashrc
+  ansible.builtin.lineinfile:
+    path: /home/ubuntu/.bashrc
+    line: "source <(kubectl completion bash)"
+    insertafter: EOF
+
+- name: Add kubectl alias to ubuntu user's bashrc
+  ansible.builtin.lineinfile:
+    path: /home/ubuntu/.bashrc
+    line: "alias k=kubectl"
+    insertafter: EOF
+
+- name: Add kubectl completion for the k alias to ubuntu user's bashrc
+  ansible.builtin.lineinfile:
+    path: /home/ubuntu/.bashrc
+    line: "complete -F __start_kubectl k"
+    insertafter: EOF
