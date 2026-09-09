@@ -1,0 +1,20 @@
+---
+title: "CoreDNS: статическая запись указывает не туда"
+domain: Services & Networking
+difficulty: medium
+time: "12m"
+hints:
+  - "kubectl -n kube-system get cm coredns -o yaml — Corefile лежит текстом внутри data.Corefile"
+  - "плагин hosts { IP hostname \\n fallthrough ZONES } — статические записи; здесь fallthrough уже с зонами cluster.local in-addr.arpa ip6.arpa (как у kubernetes-плагина) — это не то, что нужно чинить, дело в самом IP"
+  - "coredns подхватывает изменения ConfigMap сам, без рестарта — в Corefile есть плагин reload (по умолчанию раз в 30с), плюс kubelet синкает смонтированный ConfigMap с задержкой. Изменение может дойти не мгновенно — если через минуту не подхватилось, проверь синтаксис"
+  - "kubectl -n {{ lab_namespace }} exec deploy/client -- nslookup legacy-db.internal — так проверяется резолвинг руками"
+debrief: >-
+  Плагин hosts в CoreDNS позволяет захардкодить конкретные A-записи прямо в
+  Corefile, в обход обычного DNS/kubernetes-плагина — удобно для legacy-хостов,
+  которых нет ни в кластере, ни во внешнем DNS. fallthrough внутри hosts
+  обязателен, причём с явным списком зон (fallthrough без аргументов в этой
+  версии CoreDNS не пропускает *.svc.cluster.local дальше к kubernetes-плагину) —
+  без него hosts становится terminal для всех незнакомых имён и отвечает
+  NXDOMAIN. ConfigMap coredns подхватывается на лету через плагин reload, но
+  не мгновенно: сначала kubelet должен обновить смонтированный файл в самом
+  поде, и только потом reload его перечитает.

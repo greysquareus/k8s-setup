@@ -1,0 +1,107 @@
+---
+- name: Дождаться готовности всех Deployment'ов
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ lab_namespace }}"
+    name: "{{ item }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 120
+  loop:
+    - frontend
+    - admin
+    - rogue
+    - backend
+    - db
+  loop_control:
+    label: "{{ item }}"
+
+- name: Найти поды всех ролей
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Pod
+    namespace: "{{ lab_namespace }}"
+    label_selectors:
+      - "role in (frontend,admin,rogue,backend,db)"
+    field_selectors:
+      - status.phase=Running
+  register: v_pods
+  until: (v_pods.resources | length) == 5
+  retries: 15
+  delay: 5
+
+- name: Разложить поды по ролям
+  ansible.builtin.set_fact:
+    v_pod_by_role: >-
+      {{ dict(v_pods.resources | map(attribute='metadata.labels.role')
+              | zip(v_pods.resources | map(attribute='metadata.name'))) }}
+
+# Заблокированный NetworkPolicy трафик (включая DNS, если egress закрыт
+# совсем) молча дропается — клиентские флаги-таймауты (nc -w, wget -T) на
+# это не всегда реагируют и виснут вместе с exec-каналом kubernetes.core.k8s_exec.
+# Поэтому убиваем снаружи через timeout(1) и оборачиваем в sh -c "... || ...",
+# чтобы exec-канал видел только чисто завершившийся процесс (rc всегда 0),
+# а результат читаем из stdout.
+- name: "frontend -> backend:80"
+  kubernetes.core.k8s_exec:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    namespace: "{{ lab_namespace }}"
+    pod: "{{ v_pod_by_role.frontend }}"
+    command: sh -c "timeout 3 nc -z backend-svc 80 && echo RESULT_OK || echo RESULT_FAIL"
+  register: v_frontend_to_backend
+  until: "'RESULT_OK' in (v_frontend_to_backend.stdout | default(''))"
+  retries: 3
+  delay: 2
+  ignore_errors: true
+
+- name: "admin -> backend:80"
+  kubernetes.core.k8s_exec:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    namespace: "{{ lab_namespace }}"
+    pod: "{{ v_pod_by_role.admin }}"
+    command: sh -c "timeout 3 nc -z backend-svc 80 && echo RESULT_OK || echo RESULT_FAIL"
+  register: v_admin_to_backend
+  until: "'RESULT_OK' in (v_admin_to_backend.stdout | default(''))"
+  retries: 3
+  delay: 2
+  ignore_errors: true
+
+- name: "rogue -> backend:80 (не должно получиться)"
+  kubernetes.core.k8s_exec:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    namespace: "{{ lab_namespace }}"
+    pod: "{{ v_pod_by_role.rogue }}"
+    command: sh -c "timeout 3 nc -z backend-svc 80 && echo RESULT_OK || echo RESULT_FAIL"
+  register: v_rogue_to_backend
+  ignore_errors: true
+
+- name: "backend -> db:80"
+  kubernetes.core.k8s_exec:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    namespace: "{{ lab_namespace }}"
+    pod: "{{ v_pod_by_role.backend }}"
+    command: sh -c "timeout 3 nc -z db-svc 80 && echo RESULT_OK || echo RESULT_FAIL"
+  register: v_backend_to_db
+  until: "'RESULT_OK' in (v_backend_to_db.stdout | default(''))"
+  retries: 3
+  delay: 2
+  ignore_errors: true
+
+- name: Проверить результаты
+  ansible.builtin.assert:
+    that:
+      - "'RESULT_OK' in (v_frontend_to_backend.stdout | default(''))"
+      - "'RESULT_OK' in (v_admin_to_backend.stdout | default(''))"
+      - "'RESULT_OK' not in (v_rogue_to_backend.stdout | default(''))"
+      - "'RESULT_OK' in (v_backend_to_db.stdout | default(''))"
+    fail_msg: >-
+      frontend->backend: {{ v_frontend_to_backend.stdout | default('?') | trim }},
+      admin->backend: {{ v_admin_to_backend.stdout | default('?') | trim }},
+      rogue->backend: {{ v_rogue_to_backend.stdout | default('?') | trim }} (должно быть RESULT_FAIL),
+      backend->db: {{ v_backend_to_db.stdout | default('?') | trim }}
+    quiet: true

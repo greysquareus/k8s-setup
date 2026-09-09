@@ -1,0 +1,16 @@
+---
+title: "HPA не может считать метрики"
+domain: Autoscaling
+difficulty: medium
+time: "15m"
+hints:
+  - "kubectl -n {{ lab_namespace }} describe hpa web-api-hpa — смотри Conditions: AbleToScale и ScalingActive, и их Reason"
+  - "AbleToScale=False с FailedGetScale значит HPA не может найти сам scaleTargetRef — сверь apiVersion/kind/name с реальным Deployment"
+  - "ScalingActive=False с FailedGetResourceMetric значит metrics-server не может посчитать %: у контейнера нет resources.requests.cpu — без запроса не с чем сравнивать текущее потребление"
+debrief: >-
+  HPA считает утилизацию как отношение текущего потребления к
+  resources.requests того же ресурса у контейнера — без requests.cpu
+  проценты посчитать не из чего, и HPA будет висеть в ScalingActive=False
+  вне зависимости от того, работает metrics-server или нет. scaleTargetRef
+  же должен точно указывать на существующий Deployment (apiVersion/kind/name) —
+  иначе HPA даже не сможет прочитать текущее число реплик.

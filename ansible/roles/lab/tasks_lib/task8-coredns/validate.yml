@@ -1,0 +1,72 @@
+---
+- name: Дождаться готовности Deployment client
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ lab_namespace }}"
+    name: client
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 60
+  register: v_deploy
+
+- name: Найти под client
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Pod
+    namespace: "{{ lab_namespace }}"
+    label_selectors:
+      - app=client
+    field_selectors:
+      - status.phase=Running
+  register: v_pods
+  until: v_pods.resources | length == 1
+  retries: 12
+  delay: 5
+
+# CoreDNS подхватывает изменённый ConfigMap через плагин reload не мгновенно
+# (по умолчанию раз в 30с) — поэтому ретраим, а не проверяем один раз.
+- name: legacy-db.internal резолвится в 10.20.30.40
+  kubernetes.core.k8s_exec:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    namespace: "{{ lab_namespace }}"
+    pod: "{{ v_pods.resources[0].metadata.name }}"
+    command: sh -c "timeout 3 nslookup legacy-db.internal || echo LOOKUP_FAILED"
+  register: v_legacy
+  until: "'10.20.30.40' in (v_legacy.stdout | default(''))"
+  retries: 8
+  delay: 10
+  ignore_errors: true
+
+- name: Проверить legacy-db.internal
+  ansible.builtin.assert:
+    that:
+      - "'10.20.30.40' in (v_legacy.stdout | default(''))"
+    fail_msg: "legacy-db.internal не резолвится в 10.20.30.40: {{ v_legacy.stdout | default('') | trim }}"
+    quiet: true
+
+# Полное имя, а не короткое kubernetes.default — короткая форма зависит от
+# search-доменов и поведения резолвера самого busybox (ndots), а тут
+# проверяем именно CoreDNS, а не resolv.conf клиента.
+- name: kubernetes.default.svc.cluster.local по-прежнему резолвится
+  kubernetes.core.k8s_exec:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    namespace: "{{ lab_namespace }}"
+    pod: "{{ v_pods.resources[0].metadata.name }}"
+    command: sh -c "timeout 3 nslookup kubernetes.default.svc.cluster.local || echo LOOKUP_FAILED"
+  register: v_kube_default
+  ignore_errors: true
+
+- name: Проверить kubernetes.default.svc.cluster.local
+  ansible.builtin.assert:
+    that:
+      - "'LOOKUP_FAILED' not in (v_kube_default.stdout | default('LOOKUP_FAILED'))"
+      - "\"can't find\" not in (v_kube_default.stdout | default(''))"
+    fail_msg: >-
+      kubernetes.default.svc.cluster.local перестал резолвиться — hosts без
+      правильного fallthrough сломал обычный DNS: {{ v_kube_default.stdout | default('') | trim }}
+    quiet: true

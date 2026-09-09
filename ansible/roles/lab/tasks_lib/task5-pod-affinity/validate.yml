@@ -1,0 +1,121 @@
+---
+- name: Дождаться готовности Deployment api
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ lab_namespace }}"
+    name: api
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 90
+  register: v_api_deploy
+
+- name: Deployment api не трогали
+  ansible.builtin.assert:
+    that:
+      - v_api_deploy.resources[0].status.readyReplicas | default(0) | int == 2
+    fail_msg: "Deployment api должен остаться с 2 готовыми репликами"
+    quiet: true
+
+- name: Дождаться, пока поднимутся все 3 реплики cache
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ lab_namespace }}"
+    name: cache
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 120
+  register: v_cache_deploy
+
+- name: Реплик по-прежнему три и все готовы
+  ansible.builtin.assert:
+    that:
+      - v_cache_deploy.resources[0].spec.replicas | int == 3
+      - v_cache_deploy.resources[0].status.readyReplicas | default(0) | int == 3
+    fail_msg: >-
+      Ожидалось 3 готовых реплики cache, сейчас
+      {{ v_cache_deploy.resources[0].status.readyReplicas | default(0) }}
+      из {{ v_cache_deploy.resources[0].spec.replicas }}
+    quiet: true
+
+# Правило разъезда должно остаться в манифесте — просто удалить его нельзя.
+- name: Правило podAntiAffinity для cache сохранено
+  ansible.builtin.assert:
+    that:
+      - v_cache_deploy.resources[0].spec.template.spec.affinity.podAntiAffinity is defined
+    fail_msg: >-
+      Из cache пропал podAntiAffinity — намерение разносить реплики по нодам
+      должно сохраниться, его нужно было сделать мягким, а не выкидывать
+    quiet: true
+
+- name: Притяжение к api осталось жёстким
+  ansible.builtin.assert:
+    that:
+      - >-
+        v_cache_deploy.resources[0].spec.template.spec.affinity.podAffinity
+        .requiredDuringSchedulingIgnoredDuringExecution is defined
+    fail_msg: >-
+      podAffinity к api должен остаться requiredDuringScheduling —
+      это требование ослаблять нельзя
+    quiet: true
+
+- name: Найти поды api
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Pod
+    namespace: "{{ lab_namespace }}"
+    label_selectors:
+      - app=api
+    field_selectors:
+      - status.phase=Running
+  register: v_api_pods
+
+- name: Найти поды cache
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Pod
+    namespace: "{{ lab_namespace }}"
+    label_selectors:
+      - app=cache
+    field_selectors:
+      - status.phase=Running
+  register: v_cache_pods
+
+- name: Запомнить ноды подов
+  ansible.builtin.set_fact:
+    v_api_nodes: "{{ v_api_pods.resources | map(attribute='spec.nodeName') | list }}"
+    v_cache_nodes: "{{ v_cache_pods.resources | map(attribute='spec.nodeName') | list }}"
+
+- name: Три пода cache в Running
+  ansible.builtin.assert:
+    that:
+      - v_cache_pods.resources | length == 3
+    fail_msg: "Running-подов cache: {{ v_cache_pods.resources | length }}, а нужно 3"
+    quiet: true
+
+- name: Каждая реплика cache стоит на ноде с api
+  ansible.builtin.assert:
+    that:
+      - v_cache_nodes | difference(v_api_nodes) | length == 0
+    fail_msg: >-
+      cache на нодах {{ v_cache_nodes }}, api на нодах {{ v_api_nodes }} —
+      podAffinity к api не соблюдён
+    quiet: true
+
+# Три пода на две ноды идеально не разложить, но все три на одной ноде
+# означают, что разъезд по факту не работает.
+- name: Реплики cache реально разъехались
+  ansible.builtin.assert:
+    that:
+      - v_cache_nodes | unique | length >= 2
+    fail_msg: "Все реплики cache оказались на одной ноде ({{ v_cache_nodes }})"
+    quiet: true

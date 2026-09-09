@@ -1,0 +1,23 @@
+---
+# ClusterIssuer cluster-scoped, а Issuer этой задачи лежит в default —
+# снос namespace {{ lab_namespace }} не заденет ни того, ни другого.
+- name: Удалить ClusterIssuer selfsigned-issuer
+  kubernetes.core.k8s:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: absent
+    api_version: cert-manager.io/v1
+    kind: ClusterIssuer
+    name: selfsigned-issuer
+    wait: true
+    wait_timeout: 60
+
+- name: Удалить Issuer selfsigned-issuer из default
+  kubernetes.core.k8s:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: absent
+    api_version: cert-manager.io/v1
+    kind: Issuer
+    namespace: default
+    name: selfsigned-issuer
+    wait: true
+    wait_timeout: 60

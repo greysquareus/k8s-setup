@@ -1,0 +1,124 @@
+---
+- name: Дождаться Programmed у Gateway web-gw
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: gateway.networking.k8s.io/v1
+    kind: Gateway
+    namespace: "{{ lab_namespace }}"
+    name: web-gw
+    wait: true
+    wait_condition:
+      type: Programmed
+      status: "True"
+    wait_timeout: 180
+  register: v_gw
+
+- name: Дождаться готовности Deployment shop и client
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ lab_namespace }}"
+    name: "{{ item }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 120
+  loop:
+    - shop
+    - client
+  loop_control:
+    label: "{{ item }}"
+
+- name: Получить HTTPRoute shop-route
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    namespace: "{{ lab_namespace }}"
+    name: shop-route
+  register: v_route
+  until: >-
+    (v_route.resources | default([]) | length == 1)
+    and (v_route.resources[0].status.parents | default([])
+         | selectattr('parentRef.name', 'equalto', 'web-gw') | list | length) > 0
+  retries: 12
+  delay: 5
+
+# При смене parentRefs в статусе какое-то время висят сразу две записи
+# (старая и новая) — поэтому собираем conditions со всех родителей web-gw,
+# а не берём первую попавшуюся запись.
+- name: Собрать conditions всех родителей web-gw
+  ansible.builtin.set_fact:
+    v_parent_conditions: >-
+      {{ v_route.resources[0].status.parents
+         | selectattr('parentRef.name', 'equalto', 'web-gw')
+         | map(attribute='conditions') | flatten }}
+
+- name: HTTPRoute принят слушателем (Accepted)
+  ansible.builtin.assert:
+    that:
+      - >-
+        (v_parent_conditions | selectattr('type', 'equalto', 'Accepted')
+         | selectattr('status', 'equalto', 'True') | list | length) >= 1
+    fail_msg: >-
+      HTTPRoute не Accepted у web-gw:
+      {{ v_parent_conditions | selectattr('type', 'equalto', 'Accepted')
+         | map(attribute='reason') | list }}
+      — проверь parentRefs.sectionName и пересечение hostnames с listener'ом
+    quiet: true
+
+- name: Бэкенды маршрута разрезолвились (ResolvedRefs)
+  ansible.builtin.assert:
+    that:
+      - >-
+        (v_parent_conditions | selectattr('type', 'equalto', 'ResolvedRefs')
+         | selectattr('status', 'equalto', 'True') | list | length) >= 1
+    fail_msg: >-
+      backendRefs не разрезолвились:
+      {{ v_parent_conditions | selectattr('type', 'equalto', 'ResolvedRefs')
+         | map(attribute='reason') | list }}
+      — port в backendRefs должен совпадать с портом Service
+    quiet: true
+
+# Находит ClusterIP Service'а Envoy-прокси, поднятого под этот Gateway.
+- name: Найти адрес Envoy-прокси
+  ansible.builtin.include_tasks: "{{ role_path }}/tasks/gateway_endpoint.yml"
+
+- name: Найти под client
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Pod
+    namespace: "{{ lab_namespace }}"
+    label_selectors:
+      - app=client
+    field_selectors:
+      - status.phase=Running
+  register: v_client
+
+# Тот же приём, что в task4: удалённый процесс всегда завершается кодом 0,
+# результат читаем из stdout — иначе k8s_exec спотыкается о процесс,
+# убитый по таймауту.
+- name: Запрос через Gateway с Host shop.example.com
+  kubernetes.core.k8s_exec:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    namespace: "{{ lab_namespace }}"
+    pod: "{{ v_client.resources[0].metadata.name }}"
+    command: >-
+      sh -c "timeout 5 wget -qO- --header 'Host: shop.example.com' http://{{ v_gw_host }}/ || echo REQUEST_FAILED"
+  register: v_http
+  until: "'shop-ok' in (v_http.stdout | default(''))"
+  retries: 12
+  delay: 5
+  ignore_errors: true
+
+- name: Трафик доходит до backend
+  ansible.builtin.assert:
+    that:
+      - "'shop-ok' in (v_http.stdout | default(''))"
+    fail_msg: >-
+      Ответ от Envoy ({{ v_gw_host }}): {{ v_http.stdout | default('') | trim }}
+      {{ v_http.stderr | default('') | trim }}
+    quiet: true

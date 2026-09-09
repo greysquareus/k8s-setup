@@ -1,0 +1,40 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-netpol
+  namespace: {{ lab_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      role: backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              role: frontend
+      ports:
+        - protocol: TCP
+          port: 80
+    - from:
+        - podSelector:
+            matchLabels:
+              role: admin
+      ports:
+        - protocol: TCP
+          port: 80
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              role: db
+      ports:
+        - protocol: TCP
+          port: 80
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

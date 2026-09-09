@@ -1,29 +1,15 @@
+---
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
 metadata:
-  name: host-network
+  name: envoy-config
   namespace: envoy-gateway-system
 spec:
-  mergeGateways: true
   provider:
     type: Kubernetes
     kubernetes:
-      useListenerPortAsContainerPort: true
-      envoyDaemonSet:
-        patch:
-          type: StrategicMerge
-          value:
-            spec:
-              template:
-                spec:
-                  hostNetwork: true
-                  dnsPolicy: ClusterFirstWithHostNet
-        container:
-          securityContext:
-            capabilities:
-              add: ["NET_BIND_SERVICE"]
       envoyService:
-        type: ClusterIP
+        type: NodePort
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
@@ -34,5 +20,5 @@ spec:
   parametersRef:
     group: gateway.envoyproxy.io
     kind: EnvoyProxy
-    name: host-network
+    name: envoy-config
     namespace: envoy-gateway-system

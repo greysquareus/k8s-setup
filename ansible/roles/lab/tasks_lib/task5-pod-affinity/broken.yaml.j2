@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: {{ lab_namespace }}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: api
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          resources:
+            requests:
+              cpu: 20m
+              memory: 20Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache
+  namespace: {{ lab_namespace }}
+spec:
+  replicas: 3
+  # Recreate, а не RollingUpdate: при смене anti-affinity скользящее
+  # обновление встаёт в дедлок — новый под не сядет, пока живы старые поды
+  # с жёстким правилом, а старые нельзя убрать, не уронив доступность ниже
+  # минимума. Recreate сначала гасит старые, потом поднимает новые.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: cache
+  template:
+    metadata:
+      labels:
+        app: cache
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: api
+              topologyKey: kubernetes.io/hostname
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: cache
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          resources:
+            requests:
+              cpu: 20m
+              memory: 20Mi

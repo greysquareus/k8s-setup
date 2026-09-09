@@ -1,32 +1,15 @@
 ---
-# Эталонное решение. Ресурсы пересоздаются, потому что часть полей
-# (например command у Pod) неизменяемы.
-- name: Прочитать solution
-  ansible.builtin.set_fact:
-    lab_solution: >-
-      {{ lookup('template', lab_tasks_dir ~ '/' ~ lab_task ~ '/solution.yaml.j2')
-         | from_yaml_all | list }}
-
-- name: Удалить старые объекты
-  kubernetes.core.k8s:
-    kubeconfig: "{{ lab_kubeconfig }}"
-    state: absent
-    namespace: "{{ lab_namespace }}"
-    api_version: "{{ item.apiVersion }}"
-    kind: "{{ item.kind }}"
-    name: "{{ item.metadata.name }}"
-    wait: true
-    wait_timeout: 120
-  loop: "{{ lab_solution }}"
-  loop_control:
-    label: "{{ item.kind }}/{{ item.metadata.name }}"
-
-- name: Применить решение
+# apply: true — это server-side apply. Обычный state: present делает
+# strategic merge patch, который умеет только добавлять/менять поля, но НЕ
+# удаляет те, что исчезли из манифеста. Для решений, где поле надо именно
+# убрать (например, заменить requiredDuringScheduling на preferred), merge
+# оставил бы оба правила сразу и решение не сработало бы.
+- name: Применить эталонное решение поверх текущего состояния
   kubernetes.core.k8s:
     kubeconfig: "{{ lab_kubeconfig }}"
     state: present
+    apply: true
     namespace: "{{ lab_namespace }}"
-    definition: "{{ lab_solution }}"
-
-- name: Перепроверить
-  ansible.builtin.include_tasks: validate.yml
+    definition: >-
+      {{ lookup('template', lab_tasks_dir ~ '/' ~ lab_task ~ '/solution.yaml.j2')
+         | from_yaml_all | list }}

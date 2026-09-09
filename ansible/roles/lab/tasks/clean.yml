@@ -1,8 +1,9 @@
 ---
-- name: Откатить изменения на нодах
-  ansible.builtin.include_tasks: "{{ lab_tasks_dir }}/{{ lab_task }}/cleanup.yml"
-  when: (lab_tasks_dir ~ '/' ~ lab_task ~ '/cleanup.yml') is exists
-
+# Namespace удаляем первым: некоторые cluster-scoped ресурсы (например,
+# PersistentVolume) не могут удалиться, пока их держит Bound PVC внутри
+# namespace (finalizer kubernetes.io/pv-protection) — сначала должен уйти
+# namespace вместе с PVC, и только потом имеет смысл чистить то, что
+# осталось вне него. Тот же порядок, что и в deploy.yml.
 - name: Удалить namespace {{ lab_namespace }}
   kubernetes.core.k8s:
     kubeconfig: "{{ lab_kubeconfig }}"
@@ -12,3 +13,7 @@
     name: "{{ lab_namespace }}"
     wait: true
     wait_timeout: 180
+
+- name: Откатить изменения вне namespace (ноды, cluster-scoped ресурсы)
+  ansible.builtin.include_tasks: "{{ lab_tasks_dir }}/{{ lab_task }}/cleanup.yml"
+  when: (lab_tasks_dir ~ '/' ~ lab_task ~ '/cleanup.yml') is exists

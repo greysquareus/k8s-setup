@@ -1,0 +1,20 @@
+[{{ lab_task }}] Secret с TLS так и не появился
+
+В кластере установлен cert-manager. В namespace {{ lab_namespace }} лежит
+Certificate web-cert, который должен был выпустить Secret web-tls — но Secret
+не появляется, и Certificate не переходит в Ready.
+
+Кто-то до тебя завёл Issuer selfsigned-issuer, но положил его в namespace
+default.
+
+Требуется добиться, чтобы:
+  - Certificate web-cert в namespace {{ lab_namespace }} был Ready=True
+  - в namespace {{ lab_namespace }} появился Secret web-tls с ключами
+    tls.crt и tls.key
+  - сертификат покрывал ОБА имени: shop.example.com и www.shop.example.com
+  - издатель был ОДИН на весь кластер: его планируют переиспользовать из
+    других namespace, поэтому плодить по Issuer в каждом namespace нельзя
+
+Тип издателя — самоподписанный (внешний CA/ACME в лабе недоступен).
+
+Проверка: ansible-playbook lab.yml -e task={{ lab_task }} -e action=validate

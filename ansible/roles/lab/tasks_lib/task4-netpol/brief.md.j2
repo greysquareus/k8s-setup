@@ -1,0 +1,15 @@
+[{{ lab_task }}] NetworkPolicy пропускает не тех
+
+В namespace {{ lab_namespace }} развёрнуты Pod'ы с ролями frontend, admin, rogue,
+backend и db (label role=...). backend и db слушают :80.
+
+На backend навешана NetworkPolicy backend-netpol, но настроена она неправильно.
+
+Требуется, не трогая Deployment'ы и Service'ы, поправить только backend-netpol так,
+чтобы одновременно выполнялось:
+  - frontend может достучаться до backend-svc:80
+  - admin может достучаться до backend-svc:80
+  - rogue НЕ может достучаться до backend-svc:80
+  - backend может достучаться до db-svc:80 (включая резолвинг имени)
+
+Проверка: ansible-playbook lab.yml -e task={{ lab_task }} -e action=validate

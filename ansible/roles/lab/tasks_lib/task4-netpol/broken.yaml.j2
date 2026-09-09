@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: {{ lab_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: frontend
+  template:
+    metadata:
+      labels:
+        role: frontend
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep infinity"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin
+  namespace: {{ lab_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: admin
+  template:
+    metadata:
+      labels:
+        role: admin
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep infinity"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rogue
+  namespace: {{ lab_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: rogue
+  template:
+    metadata:
+      labels:
+        role: rogue
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep infinity"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: {{ lab_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: backend
+  template:
+    metadata:
+      labels:
+        role: backend
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /www && echo backend-ok > /www/index.html && httpd -f -p 80 -h /www"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  namespace: {{ lab_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: db
+  template:
+    metadata:
+      labels:
+        role: db
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /www && echo db-ok > /www/index.html && httpd -f -p 80 -h /www"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-svc
+  namespace: {{ lab_namespace }}
+spec:
+  selector:
+    role: backend
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-svc
+  namespace: {{ lab_namespace }}
+spec:
+  selector:
+    role: db
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-netpol
+  namespace: {{ lab_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      role: backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              role: rogue
+      ports:
+        - protocol: TCP
+          port: 80
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              role: frontend
+      ports:
+        - protocol: TCP
+          port: 80

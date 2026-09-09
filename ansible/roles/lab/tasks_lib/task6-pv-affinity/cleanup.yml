@@ -1,0 +1,12 @@
+---
+# PersistentVolume не namespaced — удаление namespace {{ lab_namespace }}
+# его не заденет, поэтому чистим отдельно.
+- name: Удалить data-pv
+  kubernetes.core.k8s:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    state: absent
+    api_version: v1
+    kind: PersistentVolume
+    name: data-pv
+    wait: true
+    wait_timeout: 60

@@ -1,0 +1,13 @@
+[{{ lab_task }}] HPA не масштабирует web-api
+
+В namespace {{ lab_namespace }} развёрнуты Deployment web-api (2 реплики) и
+HorizontalPodAutoscaler web-api-hpa (min 2, max 6, target 50% CPU). HPA не
+работает — `kubectl get hpa` показывает TARGETS <unknown>.
+
+Требуется, поправив Deployment web-api и/или HPA web-api-hpa, добиться, чтобы:
+  - HPA действительно ссылался на Deployment web-api
+  - HPA мог посчитать текущую утилизацию CPU (у контейнера должен быть
+    resources.requests.cpu)
+  - Conditions HPA показывали AbleToScale=True и ScalingActive=True
+
+Проверка: ansible-playbook lab.yml -e task={{ lab_task }} -e action=validate

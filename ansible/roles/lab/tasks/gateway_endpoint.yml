@@ -1,0 +1,43 @@
+---
+# Находит ClusterIP Service'а Envoy-прокси. Валидация ходит внутрь кластера,
+# поэтому ей всё равно, какой у Service тип (ClusterIP / NodePort / LoadBalancer)
+# и на каких нодах он живёт — никаких hostNetwork и node IP.
+#
+# Подключать из validate.yml задачи:
+#   - ansible.builtin.include_tasks: "{{ role_path }}/tasks/gateway_endpoint.yml"
+# Результат: v_gw_host (ClusterIP), v_gw_svc (полный объект Service).
+
+- name: Дождаться Service Envoy-прокси в envoy-gateway-system
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Service
+    namespace: envoy-gateway-system
+  register: v_envoy_svcs
+  until: >-
+    (v_envoy_svcs.resources | default([])
+     | selectattr('metadata.name', 'search', '^envoy-')
+     | rejectattr('metadata.name', 'search', '^envoy-gateway')
+     | list | length) > 0
+  retries: 24
+  delay: 5
+
+- name: Запомнить адрес прокси
+  ansible.builtin.set_fact:
+    v_gw_svc: >-
+      {{ v_envoy_svcs.resources
+         | selectattr('metadata.name', 'search', '^envoy-')
+         | rejectattr('metadata.name', 'search', '^envoy-gateway')
+         | list | first }}
+
+- name: Запомнить ClusterIP
+  ansible.builtin.set_fact:
+    v_gw_host: "{{ v_gw_svc.spec.clusterIP }}"
+
+- name: У прокси есть ClusterIP
+  ansible.builtin.assert:
+    that:
+      - v_gw_host | length > 0
+      - v_gw_host != 'None'
+    fail_msg: "Не нашёл Service Envoy-прокси — проверь kubectl -n envoy-gateway-system get svc"
+    quiet: true

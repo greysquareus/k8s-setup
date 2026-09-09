@@ -1,0 +1,73 @@
+---
+# wait_condition вместо ручного until: модуль ждёт сам и на таймауте отдаёт
+# короткое сообщение, а не вываливает весь объект Certificate в лог.
+- name: Дождаться Ready у Certificate web-cert
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: cert-manager.io/v1
+    kind: Certificate
+    namespace: "{{ lab_namespace }}"
+    name: web-cert
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: 120
+  register: v_cert
+
+- name: Издатель один на кластер (ClusterIssuer, а не Issuer в namespace)
+  ansible.builtin.assert:
+    that:
+      - v_cert.resources[0].spec.issuerRef.kind == 'ClusterIssuer'
+    fail_msg: >-
+      issuerRef.kind = {{ v_cert.resources[0].spec.issuerRef.kind }} —
+      требовался общий на кластер издатель, а не Issuer внутри namespace
+    quiet: true
+
+- name: Сертификат покрывает оба имени
+  ansible.builtin.assert:
+    that:
+      - "'shop.example.com' in (v_cert.resources[0].spec.dnsNames | default([]))"
+      - "'www.shop.example.com' in (v_cert.resources[0].spec.dnsNames | default([]))"
+    fail_msg: "dnsNames = {{ v_cert.resources[0].spec.dnsNames | default([]) }}, нужны оба имени"
+    quiet: true
+
+- name: Проверить сам ClusterIssuer
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: cert-manager.io/v1
+    kind: ClusterIssuer
+    name: "{{ v_cert.resources[0].spec.issuerRef.name }}"
+  register: v_issuer
+
+- name: ClusterIssuer существует и готов
+  ansible.builtin.assert:
+    that:
+      - v_issuer.resources | length == 1
+      - >-
+        (v_issuer.resources[0].status.conditions | default([])
+         | selectattr('type', 'equalto', 'Ready')
+         | selectattr('status', 'equalto', 'True') | list | length) == 1
+    fail_msg: "ClusterIssuer {{ v_cert.resources[0].spec.issuerRef.name }} не найден или не Ready"
+    quiet: true
+
+- name: Проверить выпущенный Secret
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Secret
+    namespace: "{{ lab_namespace }}"
+    name: web-tls
+  register: v_secret
+  until: v_secret.resources | length == 1
+  retries: 6
+  delay: 5
+
+- name: Secret web-tls содержит tls.crt и tls.key
+  ansible.builtin.assert:
+    that:
+      - v_secret.resources[0].data['tls.crt'] is defined
+      - v_secret.resources[0].data['tls.key'] is defined
+      - v_secret.resources[0].data['tls.crt'] | length > 0
+    fail_msg: "Secret web-tls есть, но без пары tls.crt/tls.key"
+    quiet: true

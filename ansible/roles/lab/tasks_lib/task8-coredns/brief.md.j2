@@ -1,0 +1,13 @@
+[{{ lab_task }}] legacy-db.internal резолвится не туда
+
+Кто-то добавил в CoreDNS статическую запись для внешнего legacy-хоста
+legacy-db.internal, но указал не тот IP.
+
+Требуется поправить ConfigMap coredns в kube-system так, чтобы:
+  - legacy-db.internal резолвился в 10.20.30.40
+  - обычный DNS (в частности kubernetes.default.svc.cluster.local) по-прежнему
+    работал
+
+Deployment/Pod'ы менять не нужно — только Corefile.
+
+Проверка: ansible-playbook lab.yml -e task={{ lab_task }} -e action=validate

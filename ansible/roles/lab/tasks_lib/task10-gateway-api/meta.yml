@@ -1,0 +1,19 @@
+---
+title: "Gateway API: HTTPRoute не цепляется к Gateway"
+domain: Services & Networking
+difficulty: hard
+time: "25m"
+hints:
+  - "kubectl -n {{ lab_namespace }} get httproute shop-route -o yaml — вся диагностика в status.parents[].conditions, там отдельно Accepted и отдельно ResolvedRefs"
+  - "Accepted=False/NoMatchingParent — parentRefs указывает на listener, которого нет: sectionName должен совпадать с именем listener'а в Gateway (kubectl -n {{ lab_namespace }} get gateway web-gw -o yaml)"
+  - "Accepted=False/NoMatchingListenerHostname — hostnames маршрута должны пересекаться с hostname listener'а, иначе слушателю нечего отдавать этому маршруту"
+  - "ResolvedRefs=False/BackendNotFound — port в backendRefs это порт SERVICE'а (spec.ports[].port), а не containerPort пода"
+debrief: >-
+  В Gateway API маршрут и слушатель связываются в три независимых этапа, и
+  каждый виден в своём condition. parentRefs+sectionName определяют, к какому
+  именно listener'у цепляется HTTPRoute (Accepted). Дальше проверяется
+  пересечение hostnames маршрута с hostname listener'а — непересекающиеся
+  имена дают NoMatchingListenerHostname, даже если parentRef верный. И
+  отдельно резолвятся backendRefs (ResolvedRefs), где port — это порт
+  Service, а не порт контейнера. Поэтому чинить надо по conditions, а не
+  наугад: каждый из трёх слоёв молчит про два других.

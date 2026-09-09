@@ -1,0 +1,1 @@
+kubeadm join 44.213.247.19:6443 --token ji8yec.8f2xa4htrv0mif03 --discovery-token-ca-cert-hash sha256:f8ed8be14d15ee3b1260fd3b0013f783542617dcbe3753e85d030ea4b8b478d8 

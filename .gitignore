@@ -7,3 +7,4 @@ ansible/inventory.ini
 *.tfstate.backup
 .venv*
 .venv
+CLAUDE.md

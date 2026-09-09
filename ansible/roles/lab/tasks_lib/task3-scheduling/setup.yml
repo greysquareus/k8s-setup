@@ -5,17 +5,27 @@
     kind: Node
   register: t3_nodes
 
-- name: Запомнить имя ноды
+# rejectattr с точечным путём вида metadata.labels.node-role.kubernetes.io/control-plane
+# трактует каждую точку как переход к вложенному атрибуту, а ключ в labels — это
+# одна строка "node-role.kubernetes.io/control-plane" с точками и слэшем внутри.
+# Такой путь никогда не резолвится, поэтому фильтр ничего не отсеивал.
+- name: Собрать имена worker-нод
   ansible.builtin.set_fact:
-    t3_node: >-
-      {{ (t3_nodes.resources
-          | rejectattr('metadata.labels.node-role.kubernetes.io/control-plane', 'defined')
-          | map(attribute='metadata.name') | sort | first) }}
+    t3_workers: >-
+      {{ (t3_workers | default([]))
+         + ([item.metadata.name] if "node-role.kubernetes.io/control-plane" not in (item.metadata.labels | default({})) else []) }}
+  loop: "{{ t3_nodes.resources }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
 
 - name: Нет ни одной worker-ноды
   ansible.builtin.fail:
     msg: "В кластере нет worker-нод — задача требует минимум одного воркера"
-  when: t3_node | length == 0
+  when: (t3_workers | default([])) | length == 0
+
+- name: Запомнить имя ноды
+  ansible.builtin.set_fact:
+    t3_node: "{{ t3_workers | sort | first }}"
 
 - name: Повесить label hw=gpu
   kubernetes.core.k8s:

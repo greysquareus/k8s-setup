@@ -1,0 +1,63 @@
+---
+- name: Дождаться готовности Deployment web-api
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ lab_namespace }}"
+    name: web-api
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 90
+  register: v_deploy
+
+- name: У контейнера задан resources.requests.cpu
+  ansible.builtin.assert:
+    that:
+      - v_deploy.resources[0].spec.template.spec.containers[0].resources.requests.cpu is defined
+    fail_msg: "У контейнера web-api нет resources.requests.cpu — HPA не сможет посчитать утилизацию"
+    quiet: true
+
+# metrics-server и HPA-контроллер синкают метрики не мгновенно — ждём,
+# пока Conditions устаканятся, а не проверяем с первой попытки.
+- name: Дождаться, пока HPA сможет читать метрики
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    namespace: "{{ lab_namespace }}"
+    name: web-api-hpa
+  register: v_hpa
+  until: >-
+    v_hpa.resources | length == 1
+    and (v_hpa.resources[0].status.conditions | default([])
+         | selectattr('type', 'equalto', 'AbleToScale')
+         | selectattr('status', 'equalto', 'True') | list | length) == 1
+    and (v_hpa.resources[0].status.conditions | default([])
+         | selectattr('type', 'equalto', 'ScalingActive')
+         | selectattr('status', 'equalto', 'True') | list | length) == 1
+  retries: 15
+  delay: 10
+
+- name: HPA ссылается на web-api
+  ansible.builtin.assert:
+    that:
+      - v_hpa.resources[0].spec.scaleTargetRef.name == 'web-api'
+      - v_hpa.resources[0].spec.scaleTargetRef.kind == 'Deployment'
+    fail_msg: "scaleTargetRef HPA не указывает на Deployment web-api"
+    quiet: true
+
+- name: HPA здоров (AbleToScale и ScalingActive)
+  ansible.builtin.assert:
+    that:
+      - (v_hpa.resources[0].status.conditions
+         | selectattr('type', 'equalto', 'AbleToScale')
+         | map(attribute='status') | first) == 'True'
+      - (v_hpa.resources[0].status.conditions
+         | selectattr('type', 'equalto', 'ScalingActive')
+         | map(attribute='status') | first) == 'True'
+    fail_msg: >-
+      Conditions HPA: {{ v_hpa.resources[0].status.conditions | default([]) }}
+    quiet: true

@@ -37,18 +37,37 @@
   retries: 20
   delay: 2
 
-- name: Откатить изменения на нодах от предыдущей задачи
-  ansible.builtin.include_tasks: "{{ lab_tasks_dir }}/{{ lab_task }}/cleanup.yml"
-  when: (lab_tasks_dir ~ '/' ~ lab_task ~ '/cleanup.yml') is exists
+# Прогоняем cleanup-хуки ВСЕХ задач, а не только разворачиваемой. Задачи
+# оставляют следы вне namespace (taint/label на нодах, PersistentVolume,
+# ClusterIssuer, правленый Corefile), и снос namespace их не убирает. Иначе
+# остатки предыдущей задачи молча ломают следующую: например, taint hw=gpu
+# от task3 отрезает воркер планировщику. Все хуки идемпотентны.
+- name: Найти cleanup-хуки всех задач
+  ansible.builtin.find:
+    paths: "{{ lab_tasks_dir }}"
+    patterns: cleanup.yml
+    recurse: true
+  register: lab_cleanup_hooks
+
+- name: Откатить изменения вне namespace от любых прошлых задач
+  ansible.builtin.include_tasks: "{{ item }}"
+  loop: "{{ lab_cleanup_hooks.files | map(attribute='path') | sort }}"
+  loop_control:
+    label: "{{ item | dirname | basename }}"
 
 - name: Подготовить окружение задачи (setup)
   ansible.builtin.include_tasks: "{{ lab_tasks_dir }}/{{ lab_task }}/setup.yml"
   when: (lab_tasks_dir ~ '/' ~ lab_task ~ '/setup.yml') is exists
 
+# apply: true — та же семантика, что у kubectl apply. Важно не только для
+# единообразия: без записанной last-applied аннотации последующий apply
+# (например, из action=solve) не сможет удалить поля, которых больше нет в
+# манифесте, и решение вроде "заменить required на preferred" не сработает.
 - name: Развернуть сломанные ресурсы
   kubernetes.core.k8s:
     kubeconfig: "{{ lab_kubeconfig }}"
     state: present
+    apply: true
     namespace: "{{ lab_namespace }}"
     definition: >-
       {{ lookup('template', lab_tasks_dir ~ '/' ~ lab_task ~ '/broken.yaml.j2')

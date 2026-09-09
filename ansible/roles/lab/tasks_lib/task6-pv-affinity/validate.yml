@@ -1,0 +1,68 @@
+---
+- name: Дождаться готовности Deployment writer
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ lab_namespace }}"
+    name: writer
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 90
+  register: v_deploy
+
+- name: Реплика writer готова
+  ansible.builtin.assert:
+    that:
+      - v_deploy.resources[0].status.readyReplicas | default(0) | int == 1
+    fail_msg: "Deployment writer не имеет готовой реплики"
+    quiet: true
+
+- name: Проверить PVC
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: PersistentVolumeClaim
+    namespace: "{{ lab_namespace }}"
+    name: data-pvc
+  register: v_pvc
+
+- name: PVC привязан к data-pv
+  ansible.builtin.assert:
+    that:
+      - v_pvc.resources[0].status.phase == 'Bound'
+      - v_pvc.resources[0].spec.volumeName == 'data-pv'
+    fail_msg: "data-pvc не Bound к data-pv"
+    quiet: true
+
+- name: Найти под writer
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    api_version: v1
+    kind: Pod
+    namespace: "{{ lab_namespace }}"
+    label_selectors:
+      - app=writer
+    field_selectors:
+      - status.phase=Running
+  register: v_pods
+
+- name: Найти control-plane ноду
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ lab_kubeconfig }}"
+    kind: Node
+    label_selectors:
+      - node-role.kubernetes.io/control-plane
+  register: v_cp_nodes
+
+- name: writer запущен не на control-plane
+  ansible.builtin.assert:
+    that:
+      - v_pods.resources | length == 1
+      - v_pods.resources[0].spec.nodeName not in (v_cp_nodes.resources | map(attribute='metadata.name') | list)
+    fail_msg: >-
+      Под writer должен быть Running на worker-ноде, а не на control-plane
+      ({{ v_pods.resources | map(attribute='spec.nodeName') | list }})
+    quiet: true

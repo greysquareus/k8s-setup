@@ -1,0 +1,16 @@
+---
+title: "NetworkPolicy: пропустить нужных, заблокировать лишних"
+domain: Services & Networking
+difficulty: hard
+time: "20m"
+hints:
+  - "kubectl -n {{ lab_namespace }} exec deploy/frontend -- timeout 3 nc -z backend-svc 80 — так проверяется реальная проходимость трафика, а не только текст политики"
+  - "policyTypes: [Ingress, Egress] с пустым или неверным egress означает запрет ВСЕГО исходящего трафика от пода — в том числе DNS (UDP/TCP 53)"
+  - "Несколько записей в ingress[].from — это OR: доступ есть, если совпадает хотя бы одна"
+  - "kubectl -n {{ lab_namespace }} describe networkpolicy backend-netpol — сверяй podSelector и port с реальными labels/портами"
+debrief: >-
+  NetworkPolicy с непустыми policyTypes, но без соответствующих правил, значит
+  полный запрет в этом направлении. Несколько элементов в ingress/egress — это OR,
+  а не AND: под получает доступ, если подходит хотя бы одно правило. DNS-трафик
+  (UDP+TCP/53) нужно разрешать в egress отдельно от остального — иначе резолвинг
+  имён ломается вместе с прикладным трафиком.

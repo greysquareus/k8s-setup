@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: shop-route
+  namespace: {{ lab_namespace }}
+spec:
+  parentRefs:
+    - name: web-gw
+      sectionName: http
+  hostnames:
+    - shop.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: shop-svc
+          port: 80

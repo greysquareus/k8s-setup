@@ -1,0 +1,20 @@
+[{{ lab_task }}] writer не может смонтировать том
+
+В кластере есть PersistentVolume data-pv (hostPath /mnt/data, 1Gi, ReadWriteOnce)
+и в namespace {{ lab_namespace }} — PersistentVolumeClaim data-pvc, который на
+него ссылается, и Deployment writer (1 реплика), монтирующий data-pvc в /data.
+
+PVC уже Bound к PV, но под writer висит в Pending — у PV неправильный
+spec.nodeAffinity.
+
+Требуется добиться, чтобы:
+  - data-pvc снова был Bound именно к data-pv (имя, capacity 1Gi, accessMode
+    ReadWriteOnce, hostPath /mnt/data — как и было)
+  - под writer (Deployment в namespace {{ lab_namespace }}) был Running на
+    одной из worker-нод (control-plane по-прежнему недоступна для обычных
+    подов — её трогать нельзя)
+
+Как именно это сделать — решай сам: PVC и Deployment можно пересоздавать,
+если это понадобится.
+
+Проверка: ansible-playbook lab.yml -e task={{ lab_task }} -e action=validate

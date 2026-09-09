@@ -1,0 +1,18 @@
+---
+title: "CRD: Certificate не выпускается"
+domain: CRD / Operators
+difficulty: hard
+time: "20m"
+hints:
+  - "kubectl -n {{ lab_namespace }} describe certificate web-cert — смотри Conditions и Events, там пишут, чего именно не хватает"
+  - "kubectl api-resources | grep cert-manager — обрати внимание на колонку NAMESPACED: Issuer namespaced, ClusterIssuer — нет. Certificate из namespace cka не видит Issuer, лежащий в другом namespace"
+  - "kubectl explain clusterissuer.spec — тип издателя (selfSigned/ca/acme) задаётся тут; для лабы достаточно selfSigned: {}"
+  - "цепочка выпуска: Certificate -> CertificateRequest -> (Order/Challenge для ACME). kubectl -n {{ lab_namespace }} get certificaterequest покажет следующий слой"
+debrief: >-
+  Operator-pattern: CRD расширяют API, а контроллер оператора реагирует на
+  созданные ресурсы. Ключевое, что легко упустить — scope: Issuer namespaced,
+  ClusterIssuer cluster-scoped. issuerRef внутри Certificate ищет Issuer
+  ТОЛЬКО в своём namespace, поэтому Issuer, лежащий в соседнем namespace,
+  для него не существует, и Certificate висит без внятной ошибки в самом
+  манифесте. Диагностировать такое надо по цепочке ресурсов
+  (Certificate -> CertificateRequest), а не по одному объекту.

@@ -1,0 +1,18 @@
+---
+title: "PV nodeAffinity держит под на control-plane"
+domain: Storage
+difficulty: medium
+time: "12m"
+hints:
+  - "kubectl -n {{ lab_namespace }} describe pod -l app=writer — Events: 'node(s) had volume node affinity conflict'"
+  - "kubectl get pv data-pv -o yaml — смотри spec.nodeAffinity, это отдельное от podAffinity/nodeSelector ограничение планировщика"
+  - "spec.nodeAffinity у PersistentVolume задаётся так же, как affinity у Pod: nodeSelectorTerms + matchExpressions"
+  - "nodeAffinity в PV нельзя запатчить на живую — поле immutable. kubectl apply/edit даст ошибку 'field is immutable'; нужно удалить PV и создать заново"
+  - "PV не удалится, пока на него есть Bound PVC (finalizer kubernetes.io/pv-protection держит) — сначала убери Deployment и PVC, потом удаляй PV"
+debrief: >-
+  nodeAffinity на PersistentVolume — это не то же самое, что affinity/nodeSelector
+  на Pod. Она живёт в spec самого PV и планировщик обязан её учитывать при
+  выборе ноды для любого пода, который смонтирует этот PV через PVC —
+  независимо от типа volume (hostPath, local и т.д.). Если PV привязан не к
+  той ноде (или к ноде, недоступной по taint), под будет висеть в Pending
+  с 'volume node affinity conflict', даже если сам под ничего плохого не просит.

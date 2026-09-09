@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache
+  namespace: {{ lab_namespace }}
+spec:
+  replicas: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: cache
+  template:
+    metadata:
+      labels:
+        app: cache
+    spec:
+      affinity:
+        # Притяжение к api остаётся жёстким: требование "рядом с api" не
+        # обсуждается.
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: api
+              topologyKey: kubernetes.io/hostname
+        # А вот разъезд реплик между нодами становится мягким: нод всего
+        # две, реплик три, и жёсткое правило оставляет третью в Pending
+        # навсегда. preferred сохраняет намерение "размазать", но не
+        # блокирует запуск.
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: cache
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          resources:
+            requests:
+              cpu: 20m
+              memory: 20Mi

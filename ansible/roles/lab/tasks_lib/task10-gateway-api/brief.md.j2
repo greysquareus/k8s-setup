@@ -1,0 +1,22 @@
+[{{ lab_task }}] Трафик через Gateway не доходит до shop
+
+В namespace {{ lab_namespace }} развёрнуты:
+  - Deployment shop (busybox httpd, слушает :8080, отдаёт "shop-ok")
+  - Service shop-svc (port 80 -> targetPort 8080)
+  - Gateway web-gw (gatewayClassName envoy) с одним listener'ом
+  - HTTPRoute shop-route, который должен связать их вместе
+  - Deployment client — с него удобно проверять запросы
+
+Сам Gateway поднялся нормально, а вот HTTPRoute к нему не прицепился.
+
+Требуется, не трогая Gateway, Service и Deployment'ы, поправить только
+HTTPRoute shop-route так, чтобы:
+  - HTTPRoute был Accepted=True и ResolvedRefs=True у родителя web-gw
+  - запрос через Envoy-прокси с Host: shop.example.com возвращал "shop-ok"
+
+Подсказка по проверке руками (IP прокси — ClusterIP сервиса Envoy в
+envoy-gateway-system):
+  kubectl -n {{ lab_namespace }} exec deploy/client -- \
+    wget -qO- --header "Host: shop.example.com" http://ENVOY_CLUSTER_IP/
+
+Проверка: ansible-playbook lab.yml -e task={{ lab_task }} -e action=validate
