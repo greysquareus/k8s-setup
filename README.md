@@ -1,5 +1,6 @@
 # k8s-setup
 
+[![CI](https://github.com/greysquareus/k8s-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/greysquareus/k8s-setup/actions/workflows/ci.yml)
 ![Terraform](https://img.shields.io/badge/Terraform-7B42BC?logo=terraform&logoColor=white)
 ![Ansible](https://img.shields.io/badge/Ansible-EE0000?logo=ansible&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.31-326CE5?logo=kubernetes&logoColor=white)

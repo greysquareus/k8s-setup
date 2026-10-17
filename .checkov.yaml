@@ -1,0 +1,12 @@
+# Lab cluster: nodes are reachable from the internet by design.
+framework:
+  - terraform
+skip-check:
+  - CKV_AWS_88    # public IPs on nodes
+  - CKV_AWS_130   # public subnet assigns public IPs
+  - CKV_AWS_24    # SSH open to the world
+  - CKV_AWS_260   # HTTP open to the world (Envoy Gateway)
+  - CKV_AWS_126   # detailed monitoring costs extra
+  - CKV2_AWS_11   # VPC flow logs cost extra
+  - CKV2_AWS_12   # default SG is unused
+  - CKV2_AWS_41   # nodes need no AWS API access
