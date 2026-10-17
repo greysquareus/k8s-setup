@@ -7,3 +7,5 @@ ansible/inventory.ini
 *.tfstate.backup
 .venv*
 .venv
+ansible/kubeconfig
+ansible/join-command.sh
