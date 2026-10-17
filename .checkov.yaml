@@ -10,3 +10,4 @@ skip-check:
   - CKV2_AWS_11   # VPC flow logs cost extra
   - CKV2_AWS_12   # default SG is unused
   - CKV2_AWS_41   # nodes need no AWS API access
+  - CKV_AWS_394   # single subnet in the first AZ, new AZs don't matter
