@@ -23,6 +23,7 @@
 - name: Load kernel modules needed by containerd/kube-proxy
   ansible.builtin.copy:
     dest: /etc/modules-load.d/k8s.conf
+    mode: "0644"
     content: |
       overlay
       br_netfilter
@@ -37,6 +38,7 @@
 - name: Configure required sysctl params
   ansible.builtin.copy:
     dest: /etc/sysctl.d/k8s.conf
+    mode: "0644"
     content: |
       net.bridge.bridge-nf-call-iptables  = 1
       net.bridge.bridge-nf-call-ip6tables = 1
@@ -76,6 +78,7 @@
 - name: Write containerd config with SystemdCgroup enabled
   ansible.builtin.copy:
     dest: /etc/containerd/config.toml
+    mode: "0644"
     content: "{{ containerd_default_config.stdout | replace('SystemdCgroup = false', 'SystemdCgroup = true') }}"
   notify: Restart containerd
 
@@ -108,6 +111,7 @@
 - name: Add Kubernetes apt repository
   ansible.builtin.copy:
     dest: /etc/apt/sources.list.d/kubernetes.list
+    mode: "0644"
     content: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ kubernetes_series }}/deb/ /\n"
 
 - name: Install kubelet, kubeadm, kubectl

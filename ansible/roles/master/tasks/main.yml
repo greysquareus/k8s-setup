@@ -1,5 +1,5 @@
 ---
-- name: kubeadm init
+- name: Run kubeadm init
   ansible.builtin.command: >
     kubeadm init
     --pod-network-cidr={{ pod_network_cidr }}
@@ -45,5 +45,6 @@
   ansible.builtin.copy:
     content: "{{ kubeadm_join_cmd.stdout }}"
     dest: "{{ playbook_dir }}/join-command.sh"
+    mode: "0600"
   delegate_to: localhost
   become: false

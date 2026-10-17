@@ -2,7 +2,7 @@
 # Namespace пересоздаётся целиком: так не нужно перечислять kind'ы,
 # нет конфликтов с CRD (Calico регистрирует свой NetworkPolicy)
 # и не воюем со служебными kube-root-ca.crt / default SA.
-- name: Снести namespace {{ lab_namespace }} с прошлой задачей
+- name: Снести namespace с прошлой задачей {{ lab_namespace }}
   kubernetes.core.k8s:
     kubeconfig: "{{ lab_kubeconfig }}"
     state: absent

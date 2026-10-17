@@ -39,6 +39,7 @@
   args:
     executable: /bin/bash
   when: helm_check.rc != 0
+  changed_when: true
 
 - name: Install Envoy Gateway CRDs
   # The chart's bundled crds/gatewayapi-crds.yaml vendors an experimental
